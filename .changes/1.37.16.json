@@ -1,0 +1,7 @@
+[
+    {
+      "category": "dependency",
+      "description": "Bumping Sphinx and Furo versions",
+      "type": "enhancement"
+    }
+  ]

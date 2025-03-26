@@ -109,6 +109,21 @@ class StreamingBody(IOBase):
             # we need to verify the content length.
             self._verify_content_length()
         return chunk
+    
+    def readinto(self, b):
+        try:
+            amount_read = self._raw_stream.readinto(b)
+        except URLLib3ReadTimeoutError as e:
+            # TODO: the url will be None as urllib3 isn't setting it yet
+            raise ReadTimeoutError(endpoint_url=e.url, error=e)
+        except URLLib3ProtocolError as e:
+            raise ResponseStreamingError(error=e)
+        self._amount_read += amount_read
+        if amount_read == 0:
+            # If the server sends empty contents then we know we need to verify
+            # the content length.
+            self._verify_content_length()
+        return amount_read
 
     def readlines(self):
         return self._raw_stream.readlines()

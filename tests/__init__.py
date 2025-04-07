@@ -465,6 +465,22 @@ class SessionHTTPStubber(BaseHTTPStubber):
         return self._obj_with_event_emitter.get_component('event_emitter')
 
 
+class UACapHTTPStubber(ClientHTTPStubber):
+    """
+    Wrapper for ClientHTTPStubber that captures UA header from one request.
+    """
+
+    def __init__(self, obj_with_event_emitter):
+        super().__init__(obj_with_event_emitter, strict=False)
+        self.add_response()  # expect exactly one request
+
+    @property
+    def captured_ua_string(self):
+        if len(self.requests) > 0:
+            return self.requests[0].headers['User-Agent'].decode()
+        return None
+
+
 class ConsistencyWaiterException(Exception):
     pass
 

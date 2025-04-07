@@ -19,23 +19,7 @@ import pytest
 
 from botocore import __version__ as botocore_version
 from botocore.config import Config
-from tests import ClientHTTPStubber
-
-
-class UACapHTTPStubber(ClientHTTPStubber):
-    """
-    Wrapper for ClientHTTPStubber that captures UA header from one request.
-    """
-
-    def __init__(self, obj_with_event_emitter):
-        super().__init__(obj_with_event_emitter, strict=False)
-        self.add_response()  # expect exactly one request
-
-    @property
-    def captured_ua_string(self):
-        if len(self.requests) > 0:
-            return self.requests[0].headers['User-Agent'].decode()
-        return None
+from tests import UACapHTTPStubber
 
 
 @pytest.mark.parametrize(

@@ -1,0 +1,5 @@
+{
+  "type": "enhancement",
+  "category": "user agent",
+  "description": "added feature id tracking for rpc v2 cbor protocol"
+}

@@ -21,6 +21,10 @@ from botocore.awsrequest import AWSRequest
 from botocore.credentials import Credentials, RefreshableCredentials
 from botocore.utils import S3ExpressIdentityCache
 from tests import ClientHTTPStubber, mock
+from tests.functional.test_useragent import (
+    get_captured_ua_strings,
+    parse_registered_feature_ids,
+)
 
 ACCESS_KEY = "AKIDEXAMPLE"
 SECRET_KEY = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY"
@@ -306,3 +310,39 @@ class TestS3ExpressRequests:
         self._assert_checksum_algorithm_added(
             'crc32', stubber.requests[1].headers
         )
+
+    def test_feature_id_registered_for_s3_express_buckets(self, default_s3_client, mock_datetime):
+        mock_datetime.utcnow.return_value = DATE
+        mock_datetime.now.return_value = DATE
+
+        with ClientHTTPStubber(default_s3_client) as stubber:
+            stubber.add_response(body=CREATE_SESSION_RESPONSE)
+            stubber.add_response()
+
+            self._call_get_object(default_s3_client)
+
+        assert len(stubber.requests) == 2
+        ua_strings = get_captured_ua_strings(stubber)
+
+        # Confirm call to CreateSession registers feature id for create_bucket
+        feature_list = parse_registered_feature_ids(ua_strings[0])
+        assert 'J' in feature_list
+
+        # Confirm call to GetObject registers feature id
+        feature_list = parse_registered_feature_ids(ua_strings[1])
+        assert 'J' in feature_list
+
+    def test_feature_id_not_registered_for_regular_s3_buckets(self, default_s3_client, mock_datetime):
+        mock_datetime.utcnow.return_value = DATE
+
+        with ClientHTTPStubber(default_s3_client) as stubber:
+            stubber.add_response()
+            stubber.add_response()
+
+            default_s3_client.create_bucket(
+                Bucket="normal-s3-bucket",
+            )
+
+        ua_strings = get_captured_ua_strings(stubber)
+        feature_list = parse_registered_feature_ids(ua_strings[0])
+        assert 'J' not in feature_list

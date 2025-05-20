@@ -87,6 +87,7 @@ from botocore.exceptions import (
     UnsupportedS3ControlArnError,
     UnsupportedS3ControlConfigurationError,
 )
+from botocore.useragent import register_feature_id
 
 logger = logging.getLogger(__name__)
 DEFAULT_METADATA_SERVICE_TIMEOUT = 1
@@ -1677,6 +1678,7 @@ class S3ExpressIdentityResolver:
         if backend == 'S3Express' and bucket_name is not None:
             context.setdefault('signing', {})
             context['signing']['cache_key'] = bucket_name
+            register_feature_id('S3_EXPRESS_BUCKET')
 
     def resolve_s3express_identity(
         self,

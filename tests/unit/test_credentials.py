@@ -102,6 +102,15 @@ class TestCredentials(BaseEnvVar):
     def test_unicode_input(self):
         self._ensure_credential_is_normalized_as_unicode('foo', 'bar')
 
+    def test_metrics_property_returns_empty_list_when_none(self):
+        c = credentials.Credentials('access', 'secret')
+        self.assertEqual(c.metrics, [])
+
+    def test_metrics_property_returns_provided_metrics(self):
+        test_metrics = ['FEATURE_A', 'FEATURE_B']
+        c = credentials.Credentials('access', 'secret', metrics=test_metrics)
+        self.assertEqual(c.metrics, test_metrics)
+
 
 class TestRefreshableCredentials(TestCredentials):
     def setUp(self):

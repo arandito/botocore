@@ -1260,6 +1260,7 @@ class TestFeatureIdRegistered:
             "expiry_time": datetime(2099, 1, 1, tzinfo=timezone.utc),
             "refresh_using": "FAKEFETCHER",
             "account_id": "01234567890",
+            "metrics": ["CREDENTIALS_HTTP"],
         }
         mock_load_http_credentials.return_value = RefreshableCredentials(
             **fake_creds

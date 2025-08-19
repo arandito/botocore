@@ -321,7 +321,7 @@ class Credentials:
     """
 
     def __init__(
-        self, access_key, secret_key, token=None, method=None, account_id=None
+        self, access_key, secret_key, token=None, method=None, account_id=None, metrics=None,
     ):
         self.access_key = access_key
         self.secret_key = secret_key
@@ -330,8 +330,8 @@ class Credentials:
         if method is None:
             method = 'explicit'
         self.method = method
+        self._metrics = metrics or []
         self.account_id = account_id
-
         self._normalize()
 
     def _normalize(self):
@@ -354,6 +354,11 @@ class Credentials:
             return getattr(self, property_name, None)
 
         return get_property
+
+    @property
+    def metrics(self):
+        """List of feature ids associated with a specific credential provider."""
+        return self._metrics
 
 
 class RefreshableCredentials(Credentials):
@@ -390,6 +395,7 @@ class RefreshableCredentials(Credentials):
         advisory_timeout=None,
         mandatory_timeout=None,
         account_id=None,
+        metrics=None,
     ):
         self._refresh_using = refresh_using
         self._access_key = access_key
@@ -400,6 +406,7 @@ class RefreshableCredentials(Credentials):
         self._time_fetcher = time_fetcher
         self._refresh_lock = threading.Lock()
         self.method = method
+        self._metrics = metrics or []
         self._frozen_credentials = ReadOnlyCredentials(
             access_key, secret_key, token, account_id
         )
@@ -421,6 +428,7 @@ class RefreshableCredentials(Credentials):
         method,
         advisory_timeout=None,
         mandatory_timeout=None,
+        metrics=None,
     ):
         kwargs = {}
         if advisory_timeout is not None:
@@ -436,6 +444,7 @@ class RefreshableCredentials(Credentials):
             method=method,
             refresh_using=refresh_using,
             account_id=metadata.get('account_id'),
+            metrics=metrics,
             **kwargs,
         )
         return instance
@@ -675,7 +684,7 @@ class DeferredRefreshableCredentials(RefreshableCredentials):
     refresh_using will be called upon first access.
     """
 
-    def __init__(self, refresh_using, method, time_fetcher=_local_now):
+    def __init__(self, refresh_using, method, time_fetcher=_local_now, metrics=None):
         self._refresh_using = refresh_using
         self._access_key = None
         self._secret_key = None
@@ -686,6 +695,7 @@ class DeferredRefreshableCredentials(RefreshableCredentials):
         self._refresh_lock = threading.Lock()
         self.method = method
         self._frozen_credentials = None
+        self._metrics= metrics or []
 
     def refresh_needed(self, refresh_in=None):
         if self._frozen_credentials is None:
@@ -1124,6 +1134,7 @@ class InstanceMetadataProvider(CredentialProvider):
 
     def __init__(self, iam_role_fetcher):
         self._role_fetcher = iam_role_fetcher
+        self._metrics = ['CREDENTIALS_IMDS']
 
     def load(self):
         fetcher = self._role_fetcher
@@ -1143,6 +1154,7 @@ class InstanceMetadataProvider(CredentialProvider):
             metadata,
             method=self.METHOD,
             refresh_using=fetcher.retrieve_iam_role_credentials,
+            metrics=self._metrics,
         )
         return creds
 
@@ -2013,6 +2025,7 @@ class ContainerProvider(CredentialProvider):
             fetcher = ContainerMetadataFetcher()
         self._environ = environ
         self._fetcher = fetcher
+        self._metrics = ['CREDENTIALS_HTTP']
 
     def load(self):
         # This cred provider is only triggered if the self.ENV_VAR is set,
@@ -2035,6 +2048,7 @@ class ContainerProvider(CredentialProvider):
             expiry_time=_parse_if_needed(creds['expiry_time']),
             refresh_using=fetcher,
             account_id=creds.get('account_id'),
+            metrics=self._metrics
         )
 
     def _build_headers(self):

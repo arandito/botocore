@@ -44,6 +44,7 @@ from botocore.exceptions import (
     UnknownCredentialError,
 )
 from botocore.tokens import SSOTokenProvider
+from botocore.useragent import register_feature_id
 from botocore.utils import (
     ArnParser,
     ContainerMetadataFetcher,
@@ -162,6 +163,9 @@ def create_credential_resolver(session, cache=None, region_name=None):
     resolver = CredentialResolver(providers=providers)
     return resolver
 
+def register_credential_feature_ids(feature_ids):
+    for feature_id in feature_ids:
+        register_feature_id(feature_id)
 
 class ProfileProviderBuilder:
     """This class handles the creation of profile based providers.
@@ -837,6 +841,7 @@ class AssumeRoleCredentialFetcher(BaseAssumeRoleCredentialFetcher):
         mfa_prompter=None,
         cache=None,
         expiry_window_seconds=None,
+        feature_ids=None,
     ):
         """
         :type client_creator: callable
@@ -873,6 +878,7 @@ class AssumeRoleCredentialFetcher(BaseAssumeRoleCredentialFetcher):
         self._mfa_prompter = mfa_prompter
         if self._mfa_prompter is None:
             self._mfa_prompter = getpass.getpass
+        self._feature_ids = feature_ids
 
         super().__init__(
             client_creator,
@@ -884,6 +890,7 @@ class AssumeRoleCredentialFetcher(BaseAssumeRoleCredentialFetcher):
 
     def _get_credentials(self):
         """Get credentials by calling assume role."""
+        register_credential_feature_ids(self._feature_ids)
         kwargs = self._assume_role_kwargs()
         client = self._create_client()
         response = client.assume_role(**kwargs)
@@ -1362,6 +1369,7 @@ class SharedCredentialProvider(CredentialProvider):
                 )
                 token = self._get_session_token(config)
                 account_id = self._get_account_id(config)
+                register_feature_id('CREDENTIALS_PROFILE')
                 return Credentials(
                     access_key,
                     secret_key,
@@ -1429,6 +1437,7 @@ class ConfigProvider(CredentialProvider):
                 )
                 token = self._get_session_token(profile_config)
                 account_id = self._get_account_id(profile_config)
+                register_feature_id('CREDENTIALS_PROFILE')
                 return Credentials(
                     access_key,
                     secret_key,
@@ -1569,6 +1578,7 @@ class AssumeRoleProvider(CredentialProvider):
         self._credential_sourcer = credential_sourcer
         self._profile_provider_builder = profile_provider_builder
         self._visited_profiles = [self._profile_name]
+        self._feature_ids = set()
 
     def load(self):
         self._loaded_config = self._load_config()
@@ -1618,11 +1628,14 @@ class AssumeRoleProvider(CredentialProvider):
             extra_args=extra_args,
             mfa_prompter=self._prompter,
             cache=self.cache,
+            feature_ids=self._feature_ids.copy(),
         )
         refresher = fetcher.fetch_credentials
         if mfa_serial is not None:
             refresher = create_mfa_serial_refresher(refresher)
 
+        self._feature_ids.add('CREDENTIALS_STS_ASSUME_ROLE')
+        register_credential_feature_ids(self._feature_ids)
         # The initial credentials are empty and the expiration time is set
         # to now so that we can delay the call to assume role until it is
         # strictly needed.
@@ -1751,17 +1764,20 @@ class AssumeRoleProvider(CredentialProvider):
     def _resolve_source_credentials(self, role_config, profile_name):
         credential_source = role_config.get('credential_source')
         if credential_source is not None:
+            self._feature_ids.add('CREDENTIALS_PROFILE_NAMED_PROVIDER')
             return self._resolve_credentials_from_source(
                 credential_source, profile_name
             )
 
         source_profile = role_config['source_profile']
         self._visited_profiles.append(source_profile)
+        self._feature_ids.add('CREDENTIALS_PROFILE_SOURCE_PROFILE')
         return self._resolve_credentials_from_profile(source_profile)
 
     def _resolve_credentials_from_profile(self, profile_name):
         profiles = self._loaded_config.get('profiles', {})
         profile = profiles[profile_name]
+        self._feature_ids.add('CREDENTIALS_PROFILE')
 
         if (
             self._has_static_credentials(profile)

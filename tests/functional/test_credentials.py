@@ -1334,7 +1334,7 @@ class TestFeatureIdRegistered:
 
 
 @pytest.mark.parametrize(
-    "test_case,config_content,env_vars,expected_source_features,expected_provider_feature",
+    "test_case,config_content,env_vars,patches,expected_source_features,expected_provider_feature",
     [
         # Test Case 1: Assume Role with source profile
         (
@@ -1347,6 +1347,7 @@ source_profile = base
 aws_access_key_id = FAKEACCESSKEY
 aws_secret_access_key = FAKESECRET''',
             {},
+            [],
             [
                 'o',
                 'n',
@@ -1363,6 +1364,7 @@ credential_source = Environment''',
                 'AWS_ACCESS_KEY_ID': 'FAKEACCESSKEY',
                 'AWS_SECRET_ACCESS_KEY': 'FAKESECRET',
             },
+            [],
             ['p'],  # CREDENTIALS_PROFILE_NAMED_PROVIDER
             'i',  # CREDENTIALS_STS_ASSUME_ROLE
         ),
@@ -1373,6 +1375,7 @@ credential_source = Environment''',
 role_arn = arn:aws:iam::123456789012:role/test-role
 web_identity_token_file = {token_file}''',
             {},
+            [],
             ['q'],  # CREDENTIALS_PROFILE_STS_WEB_ID_TOKEN
             'k',  # CREDENTIALS_STS_ASSUME_ROLE_WEB_ID
         ),
@@ -1385,6 +1388,11 @@ web_identity_token_file = {token_file}''',
                 'AWS_WEB_IDENTITY_TOKEN_FILE': '{token_file}',
                 'AWS_ROLE_SESSION_NAME': 'test-session',
             },
+            [
+                patch(
+                    "botocore.credentials.EnvProvider.load", return_value=None
+                ),
+            ],
             ['h'],  # CREDENTIALS_ENV_VARS_STS_WEB_ID_TOKEN
             'k',  # CREDENTIALS_STS_ASSUME_ROLE_WEB_ID
         ),
@@ -1394,11 +1402,15 @@ def test_user_agent_has_assume_role_feature_ids(
     test_case,
     config_content,
     env_vars,
+    patches,
     expected_source_features,
     expected_provider_feature,
     monkeypatch,
     tmp_path,
 ):
+    for patch_obj in patches:
+        patch_obj.start()
+
     is_web_identity_test = 'web_identity' in test_case
 
     # Set up web identity file if needed
@@ -1426,20 +1438,24 @@ def test_user_agent_has_assume_role_feature_ids(
     else:
         session = Session()
 
-    with SessionHTTPStubber(session) as stubber:
-        _add_assume_role_http_response(
-            stubber, with_web_identity=is_web_identity_test
-        )
-        s3 = session.create_client('s3', region_name='us-east-1')
-        stubber.add_response()
-        stubber.add_response()
-        s3.list_buckets()
-        s3.list_buckets()
+    try:
+        with SessionHTTPStubber(session) as stubber:
+            s3 = session.create_client('s3')
+            _add_assume_role_http_response(
+                stubber, with_web_identity=is_web_identity_test
+            )
+            stubber.add_response()
+            stubber.add_response()
+            s3.list_buckets()
+            s3.list_buckets()
 
-    ua_strings = get_captured_ua_strings(stubber)
-    _assert_deferred_credential_feature_ids(
-        ua_strings, expected_source_features, expected_provider_feature
-    )
+        ua_strings = get_captured_ua_strings(stubber)
+        _assert_deferred_credential_feature_ids(
+            ua_strings, expected_source_features, expected_provider_feature
+        )
+    finally:
+        for patch_obj in patches:
+            patch_obj.stop()
 
 
 def _add_assume_role_http_response(stubber, with_web_identity):
